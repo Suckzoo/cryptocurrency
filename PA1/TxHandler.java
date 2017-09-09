@@ -1,3 +1,5 @@
+import java.util.ArrayList;
+
 public class TxHandler {
 
     /**
@@ -5,8 +7,10 @@ public class TxHandler {
      * {@code utxoPool}. This should make a copy of utxoPool by using the UTXOPool(UTXOPool uPool)
      * constructor.
      */
+    private UTXOPool utxoPool;
+
     public TxHandler(UTXOPool utxoPool) {
-        // IMPLEMENT THIS
+        this.utxoPool = new UTXOPool(utxoPool);
     }
 
     /**
@@ -20,6 +24,24 @@ public class TxHandler {
      */
     public boolean isValidTx(Transaction tx) {
         // IMPLEMENT THIS
+        UTXOPool uniqueUTXOs = new UTXOPool();
+        double totalInput = 0, totalOutput = 0;
+
+        for (int i = 0; i < tx.numInputs(); i++) {
+            Transaction.Input input = tx.getInput(i);
+            UTXO utxo = new UTXO(input.prevTxHash, input.outputIndex);
+            Transaction.Output output = this.utxoPool.getTxOutput(utxo);
+            if (output == null) return false;
+            if (!Crypto.verifySignature(output.address, tx.getRawDataToSign(i), input.signature)) return false;
+            if (uniqueUTXOs.contains(utxo)) return false;
+            uniqueUTXOs.addUTXO(utxo, output);
+            totalInput += output.value;
+        }
+        for (Transaction.Output output : tx.getOutputs()) {
+            if (output.value < 0) return false;
+            totalOutput += output.value;
+        }
+        return totalOutput <= totalInput;
     }
 
     /**
@@ -29,6 +51,24 @@ public class TxHandler {
      */
     public Transaction[] handleTxs(Transaction[] possibleTxs) {
         // IMPLEMENT THIS
+        ArrayList<Transaction> acceptedTxs = new ArrayList<Transaction>();
+        for (Transaction tx : possibleTxs) {
+            if (isValidTx(tx)) {
+                for (Transaction.Input input : tx.getInputs()) {
+                    UTXO utxo = new UTXO(input.prevTxHash, input.outputIndex);
+                    this.utxoPool.removeUTXO(utxo);
+                }
+                for (int i = 0; i < tx.numOutputs(); i++) {
+                    UTXO utxo = new UTXO(tx.getHash(), i);
+                    Transaction.Output txOut = tx.getOutput(i);
+                    this.utxoPool.addUTXO(utxo, txOut);
+                }
+                acceptedTxs.add(tx);
+            }
+        }
+        Transaction[] acceptedTxArray = new Transaction[acceptedTxs.size()];
+        acceptedTxArray = acceptedTxs.toArray(acceptedTxArray);
+        return acceptedTxArray;
     }
 
 }
